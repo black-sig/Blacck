@@ -13,39 +13,40 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: 🔍 البحث وفك ضغط المشروع
+      - name: 🔍 فك الضغط وتحضير البيئة
         run: |
-          # البحث عن أي ملف مضغوط في المستودع
           ZIP_PATH=$(find . -name "*.zip" | head -n 1)
-          if [ -z "$ZIP_PATH" ]; then
-            echo "❌ خطأ: لم يتم العثور على أي ملف ZIP في المستودع!"
-            exit 1
-          fi
-          echo "✅ وجدنا الملف: $ZIP_PATH"
           unzip -o "$ZIP_PATH" -d .
-          echo "📂 قائمة الملفات بعد فك الضغط:"
-          ls -R
+          echo "✅ تم فك الضغط. الملفات الموجودة:"
+          ls -F
 
       - name: Set up Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '15.2'
 
-      - name: 🏗️ بناء الأرشيف (بالمسار التلقائي)
+      - name: 🏗️ بناء الأرشيف (الوضع الشامل)
         run: |
-          # البحث عن ملف المشروع .xcodeproj أينما كان
+          # البحث عن المساحة الشاملة (Workspace) أولاً
+          WORKSPACE_PATH=$(find . -name "*.xcworkspace" | head -n 1)
           PROJECT_PATH=$(find . -name "*.xcodeproj" | head -n 1)
-          if [ -z "$PROJECT_PATH" ]; then
-            echo "❌ خطأ: لم نجد ملف .xcodeproj داخل الـ ZIP!"
-            exit 1
+          
+          if [ -n "$WORKSPACE_PATH" ]; then
+            echo "✅ وجدنا المساحة الشاملة: $WORKSPACE_PATH"
+            BUILD_CMD="-workspace $WORKSPACE_PATH"
+          else
+            echo "⚠️ لم نجد Workspace، سنستخدم المشروع: $PROJECT_PATH"
+            BUILD_CMD="-project $PROJECT_PATH"
           fi
+
+          # تحديد الـ Scheme (غالباً يكون Feather)
+          SCHEME_NAME="Feather"
           
-          # استخراج اسم الـ Scheme تلقائياً
-          SCHEME_NAME=$(xcodebuild -list -project "$PROJECT_PATH" | grep -A 5 "Schemes:" | tail -n +2 | head -n 1 | xargs)
-          echo "✅ وجدنا المشروع في: $PROJECT_PATH"
-          echo "🚀 سنقوم بالبناء باستخدام الـ Scheme: $SCHEME_NAME"
+          echo "🚀 بدء البناء النهائي لـ Black Store..."
           
-          xcodebuild -project "$PROJECT_PATH" \
+          xcodebuild clean $BUILD_CMD -scheme "$SCHEME_NAME"
+          
+          xcodebuild $BUILD_CMD \
                      -scheme "$SCHEME_NAME" \
                      -configuration Release \
                      -sdk iphoneos \
@@ -55,15 +56,15 @@ jobs:
                      CODE_SIGN_ENTITLEMENTS="" \
                      CODE_SIGNING_METHOD=manual
 
-      - name: 📦 تحويله إلى IPA
+      - name: 📦 استخراج الـ IPA
         run: |
           mkdir -p $PWD/build/output/Payload
           cp -r $PWD/build/Feather.xcarchive/Products/Applications/*.app $PWD/build/output/Payload/
           cd $PWD/build/output
           zip -r BlackStore_Anubis.ipa Payload
-          echo "✅ تم استخراج الـ IPA بنجاح"
+          echo "✅ الـ IPA جاهز!"
 
-      - name: 📤 رفع ملف بلاك ستور
+      - name: 📤 رفع الملف النهائي
         uses: actions/upload-artifact@v4
         with:
           name: BlackStore-Anubis-Edition

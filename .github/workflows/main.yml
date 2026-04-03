@@ -3,35 +3,52 @@ name: Black Store Anubis Build
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:
+  workflow_dispatch: # يسمح لك بتشغيل البناء يدوياً
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-14 # استخدام أحدث بيئة ماك للبناء السريع
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Release Anubis (Unzip Project)
+      - name: Unzip Feather Project
         run: |
-          unzip Feather.zip -d .
-          rm Feather.zip
+          # فك ضغط المشروع (استبدال الملفات الموجودة -o)
+          unzip -o Feather.zip -d .
+          echo "✅ تم فك الضغط بنجاح"
+          # عرض قائمة الملفات للتأكد من وجود .xcodeproj
+          find . -name "*.xcodeproj"
 
       - name: Set up Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest-stable
+          xcode-version: '15.2'
 
-      - name: Build IPA
+      - name: Build Archive (Unsigned)
         run: |
-          # هنا نضع أوامر البناء الخاصة بمشروع Feather
-          # إذا كان المشروع يحتوي على سكريبت بناء جاهز، سيتم تشغيله هنا
-          xcodebuild -project Feather.xcodeproj -scheme Feather -sdk iphoneos -configuration Release archive -archivePath $PWD/build/Feather.xcarchive
-          xcodebuild -exportArchive -archivePath $PWD/build/Feather.xcarchive -exportOptionsPlist .github/workflows/exportOptions.plist -exportPath $PWD/build/output
+          # البحث عن ملف المشروع تلقائياً وتشغيل البناء
+          PROJECT_PATH=$(find . -name "Feather.xcodeproj" | head -n 1)
+          xcodebuild -project "$PROJECT_PATH" \
+                     -scheme Feather \
+                     -configuration Release \
+                     -sdk iphoneos \
+                     archive -archivePath $PWD/build/Feather.xcarchive \
+                     CODE_SIGNING_ALLOWED=NO \
+                     CODE_SIGNING_REQUIRED=NO
 
-      - name: Upload IPA Artifact
+      - name: Create IPA Package
+        run: |
+          # تحويل الـ Archive إلى ملف IPA يدوي (Payload Method)
+          mkdir -p $PWD/build/output/Payload
+          cp -r $PWD/build/Feather.xcarchive/Products/Applications/*.app $PWD/build/output/Payload/
+          cd $PWD/build/output
+          zip -r BlackStore_Anubis.ipa Payload
+          echo "✅ تم إنشاء ملف IPA بنجاح"
+
+      - name: Upload Black Store IPA
         uses: actions/upload-artifact@v4
         with:
-          name: BlackStore-Anubis-IPA
-          path: build/output/*.ipa
+          name: BlackStore-Anubis-Edition
+          path: build/output/BlackStore_Anubis.ipa

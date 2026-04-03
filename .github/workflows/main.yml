@@ -1,0 +1,4 @@
+      - name: Release Anubis (Unzip Project)
+        run: |
+          unzip Feather.zip -d .
+          rm Feather.zip
